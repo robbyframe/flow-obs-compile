@@ -1,0 +1,71 @@
+name: Compile macOS - FLOW_OBS_LUYS
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  compile-macos:
+    runs-on: macos-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install obsws-python pyinstaller
+    
+    - name: Compile for Intel x86_64
+      run: |
+        rm -rf build dist *.spec __pycache__
+        pyinstaller --onefile \
+          --target-arch x86_64 \
+          --name "FLOW_OBS_LUYS-Intel" \
+          --console \
+          FLOW_OBS_LUYS.py
+    
+    - name: Rename Intel build
+      run: |
+        mv dist/FLOW_OBS_LUYS-Intel dist/FLOW_OBS_LUYS_Intel_x86_64
+    
+    - name: Cleanup for next build
+      run: |
+        rm -rf build dist/FLOW_OBS_LUYS-Intel *.spec __pycache__
+    
+    - name: Compile for Apple Silicon arm64
+      run: |
+        pyinstaller --onefile \
+          --target-arch arm64 \
+          --name "FLOW_OBS_LUYS-M1" \
+          --console \
+          FLOW_OBS_LUYS.py
+    
+    - name: Rename M1 build
+      run: |
+        mkdir -p final_dist
+        cp dist/FLOW_OBS_LUYS-Intel final_dist/ || true
+        cp dist/FLOW_OBS_LUYS-M1 final_dist/ || true
+        mv dist/* final_dist/ 2>/dev/null || true
+    
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: flow-obs-luys-macos
+        path: final_dist/
+        retention-days: 30
+
+    - name: Create Release (optional)
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: final_dist/*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
